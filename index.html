@@ -1,0 +1,301 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="light">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Markdown 编辑器 Pro</title>
+  <!-- CDN: Markdown 解析器 -->
+  <script src="https://cdn.jsdelivr.net/npm/marked@4.3.0/marked.min.js"></script>
+  <!-- CDN: 代码高亮 (动态切换) -->
+  <link id="hljs-theme" rel="stylesheet" href="https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/styles/github.min.css">
+  <script src="https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/highlight.min.js"></script>
+  <!-- CDN: 图标库 -->
+  <link href="https://cdn.jsdelivr.net/npm/remixicon@3.5.0/fonts/remixicon.css" rel="stylesheet">
+  
+  <style>
+    :root {
+      --bg: #f8fafc; --panel-bg: #ffffff; --border: #e2e8f0; --text: #0f172a;
+      --primary: #3b82f6; --primary-hover: #2563eb; --toolbar-bg: #f1f5f9;
+      --code-bg: #f1f5f9; --preview-bg: #ffffff; --scrollbar: #cbd5e1;
+      --shadow: 0 1px 3px rgba(0,0,0,0.08);
+    }
+    [data-theme="dark"] {
+      --bg: #0b1120; --panel-bg: #111827; --border: #1e293b; --text: #e2e8f0;
+      --primary: #60a5fa; --primary-hover: #3b82f6; --toolbar-bg: #0f172a;
+      --code-bg: #1e293b; --preview-bg: #111827; --scrollbar: #334155;
+      --shadow: 0 1px 3px rgba(0,0,0,0.3);
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; transition: background 0.3s, color 0.3s, border-color 0.3s; }
+    body { font-family: system-ui, -apple-system, sans-serif; background: var(--bg); height: 100vh; display: flex; flex-direction: column; color: var(--text); }
+
+    /* 🌟 加载动画 */
+    #loader { position: fixed; inset: 0; background: var(--bg); z-index: 9999; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 16px; transition: opacity 0.5s, visibility 0.5s; }
+    #loader.hidden { opacity: 0; visibility: hidden; pointer-events: none; }
+    .spinner { width: 36px; height: 36px; border: 3px solid var(--border); border-top-color: var(--primary); border-radius: 50%; animation: spin 0.8s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .loader-text { font-size: 13px; color: var(--text); opacity: 0.7; }
+
+    /* 顶部 & 工具栏 */
+    header, .toolbar { background: var(--panel-bg); border-bottom: 1px solid var(--border); padding: 8px 16px; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; box-shadow: var(--shadow); }
+    .input-group { display: flex; gap: 6px; flex: 1; min-width: 260px; }
+    input[type="text"] { flex: 1; padding: 5px 8px; border: 1px solid var(--border); border-radius: 4px; font-size: 13px; background: var(--bg); color: var(--text); outline: none; }
+    button { padding: 5px 10px; background: var(--primary); color: #fff; border: none; border-radius: 4px; font-size: 12px; cursor: pointer; display: flex; align-items: center; gap: 4px; }
+    button:hover { background: var(--primary-hover); }
+    button.secondary { background: var(--bg); border: 1px solid var(--border); color: var(--text); }
+    button.secondary:hover { background: var(--toolbar-bg); }
+    
+    .toolbar { border-top: none; padding: 6px 16px; overflow-x: auto; }
+    .tool-btn { background: transparent; color: var(--text); border: 1px solid transparent; padding: 4px 6px; font-size: 14px; border-radius: 4px; min-width: 30px; justify-content: center; }
+    .tool-btn:hover { background: var(--toolbar-bg); border-color: var(--border); }
+    .tool-btn i { font-size: 15px; }
+    .divider { width: 1px; background: var(--border); margin: 0 6px; align-self: stretch; }
+
+    /* 主布局 */
+    .container { flex: 1; display: flex; overflow: hidden; position: relative; }
+    .pane { width: 50%; display: flex; flex-direction: column; overflow: hidden; }
+    .pane:first-child { border-right: 1px solid var(--border); }
+    textarea { width: 100%; height: 100%; border: none; outline: none; resize: none; padding: 20px; font-family: 'Fira Code', 'Consolas', monospace; font-size: 14px; line-height: 1.6; background: var(--bg); color: var(--text); tab-size: 2; }
+    
+    .preview-pane { background: var(--preview-bg); overflow-y: auto; padding: 20px 32px; }
+    .markdown-body { line-height: 1.75; }
+    .markdown-body h1, .markdown-body h2, .markdown-body h3 { margin-top: 24px; margin-bottom: 12px; font-weight: 600; border-bottom: 1px solid var(--border); padding-bottom: 6px; }
+    .markdown-body p { margin-bottom: 16px; }
+    .markdown-body ul, .markdown-body ol { padding-left: 24px; margin-bottom: 16px; }
+    .markdown-body blockquote { padding: 0 16px; border-left: 4px solid var(--primary); background: var(--bg); margin: 16px 0; padding: 12px 16px; border-radius: 0 4px 4px 0; }
+    .markdown-body code { padding: 2px 6px; background: var(--code-bg); border-radius: 4px; font-family: inherit; font-size: 0.9em; }
+    .markdown-body pre { padding: 16px; background: #1e293b; border-radius: 8px; overflow-x: auto; margin: 16px 0; }
+    .markdown-body pre code { background: none; color: #e2e8f0; padding: 0; }
+    .markdown-body img { max-width: 100%; border-radius: 6px; margin: 16px 0; box-shadow: var(--shadow); }
+    .markdown-body table { border-collapse: collapse; width: 100%; margin: 16px 0; }
+    .markdown-body th, .markdown-body td { padding: 8px 12px; border: 1px solid var(--border); }
+    .markdown-body th { background: var(--bg); }
+    .markdown-body a { color: var(--primary); text-decoration: none; }
+    .markdown-body a:hover { text-decoration: underline; }
+    .markdown-body input[type="checkbox"] { margin-right: 6px; }
+
+    /* 底部状态栏 */
+    #statusbar { background: var(--panel-bg); border-top: 1px solid var(--border); padding: 6px 16px; display: flex; justify-content: space-between; align-items: center; font-size: 12px; color: #64748b; }
+    .status-left { display: flex; gap: 16px; }
+    .status-right { display: flex; gap: 8px; align-items: center; }
+    .status-btn { background: none; border: none; color: #64748b; cursor: pointer; padding: 2px 4px; border-radius: 3px; }
+    .status-btn:hover { background: var(--bg); color: var(--text); }
+    .save-indicator { opacity: 0; transition: opacity 0.3s; }
+    .save-indicator.show { opacity: 1; }
+
+    /* 全屏模式 */
+    body.fullscreen header, body.fullscreen .toolbar, body.fullscreen #statusbar { display: none; }
+    body.fullscreen .container { height: 100vh; }
+    body.fullscreen .pane:first-child { border-right: 1px solid var(--border); }
+
+    @media (max-width: 768px) {
+      .container { flex-direction: column; }
+      .pane { width: 100%; height: 50%; }
+      .pane:first-child { border-right: none; border-bottom: 1px solid var(--border); }
+      header { flex-direction: column; align-items: stretch; }
+      .input-group { min-width: 100%; }
+    }
+  </style>
+</head>
+<body>
+  <div id="loader"><div class="spinner"></div><p class="loader-text">正在初始化编辑器...</p></div>
+
+  <header>
+    <div class="input-group">
+      <input type="text" id="mdUrl" placeholder="🔗 输入 Markdown Raw URL">
+      <button id="loadUrlBtn">加载</button>
+    </div>
+    <input type="file" id="fileInput" accept=".md,.txt" style="display: none;">
+    <button class="secondary" onclick="document.getElementById('fileInput').click()">📁 本地打开</button>
+    <button class="secondary" id="downloadBtn">💾 导出</button>
+  </header>
+
+  <div class="toolbar">
+    <button class="tool-btn" onclick="insertFormat('heading')" title="标题"><i class="ri-heading"></i></button>
+    <button class="tool-btn" onclick="insertFormat('bold')" title="加粗"><i class="ri-bold"></i></button>
+    <button class="tool-btn" onclick="insertFormat('italic')" title="斜体"><i class="ri-italic"></i></button>
+    <button class="tool-btn" onclick="insertFormat('strike')" title="删除线"><i class="ri-strikethrough"></i></button>
+    <div class="divider"></div>
+    <button class="tool-btn" onclick="insertFormat('link')" title="链接"><i class="ri-link"></i></button>
+    <button class="tool-btn" onclick="insertFormat('image')" title="图片"><i class="ri-image-add-line"></i></button>
+    <button class="tool-btn" onclick="insertFormat('code')" title="代码"><i class="ri-code-line"></i></button>
+    <button class="tool-btn" onclick="insertFormat('codeblock')" title="代码块"><i class="ri-code-box-line"></i></button>
+    <button class="tool-btn" onclick="insertFormat('quote')" title="引用"><i class="ri-double-quotes-l"></i></button>
+    <div class="divider"></div>
+    <button class="tool-btn" onclick="insertFormat('ul')" title="无序列表"><i class="ri-list-unordered"></i></button>
+    <button class="tool-btn" onclick="insertFormat('ol')" title="有序列表"><i class="ri-list-ordered"></i></button>
+    <button class="tool-btn" onclick="insertFormat('task')" title="任务列表"><i class="ri-checkbox-multiple-line"></i></button>
+    <button class="tool-btn" onclick="insertFormat('hr')" title="分割线"><i class="ri-separator"></i></button>
+    <div class="divider"></div>
+    <button class="tool-btn" onclick="copyContent()" title="复制全文"><i class="ri-file-copy-line"></i></button>
+    <button class="tool-btn" onclick="clearEditor()" title="清空"><i class="ri-delete-bin-line"></i></button>
+  </div>
+
+  <div class="container">
+    <div class="pane"><textarea id="editor" spellcheck="false" placeholder="在此输入 Markdown 内容..."></textarea></div>
+    <div class="pane preview-pane"><div id="preview" class="markdown-body"></div></div>
+  </div>
+
+  <footer id="statusbar">
+    <div class="status-left">
+      <span id="stats">字符: 0 | 单词: 0 | 行数: 1</span>
+      <span class="save-indicator" id="saveStatus">✅ 已自动保存</span>
+    </div>
+    <div class="status-right">
+      <button class="status-btn" onclick="toggleFullscreen()" title="全屏"><i class="ri-fullscreen-line"></i></button>
+      <button class="status-btn" onclick="toggleTheme()" title="切换主题"><i class="ri-moon-line" id="themeIcon"></i></button>
+    </div>
+  </footer>
+
+  <script>
+    // 1. 初始化 Marked
+    marked.setOptions({
+      gfm: true, breaks: true,
+      highlight: function(code, lang) {
+        const theme = document.documentElement.getAttribute('data-theme');
+        // 动态加载对应高亮主题（实际已预加载，此处仅演示逻辑，生产可省略）
+        if (lang && hljs.getLanguage(lang)) return hljs.highlight(code, { language: lang }).value;
+        return hljs.highlightAuto(code).value;
+      }
+    });
+
+    const editor = document.getElementById('editor');
+    const preview = document.getElementById('preview');
+    const statsEl = document.getElementById('stats');
+    const saveStatusEl = document.getElementById('saveStatus');
+
+    // 2. 实时渲染 & 统计
+    function render() {
+      preview.innerHTML = marked.parse(editor.value);
+      updateStats();
+      autoSave();
+    }
+    editor.addEventListener('input', render);
+
+    function updateStats() {
+      const txt = editor.value;
+      const chars = txt.length;
+      const words = txt.trim() ? txt.trim().split(/\s+/).length : 0;
+      const lines = txt.split('\n').length;
+      statsEl.textContent = `字符: ${chars} | 单词: ${words} | 行数: ${lines}`;
+    }
+
+    // 3. 智能插入
+    function insertFormat(type) {
+      const start = editor.selectionStart, end = editor.selectionEnd;
+      const txt = editor.value, sel = txt.substring(start, end);
+      let before = '', after = '', rep = '';
+      const map = {
+        bold: ['**', '**', '加粗文字'], italic: ['*', '*', '斜体文字'], strike: ['~~', '~~', '删除线'],
+        heading: ['## ', '', '标题'], quote: ['> ', '', '引用内容'], code: ['`', '`', 'code'],
+        codeblock: ['```\n', '\n```', '代码块'], link: ['[', '](url)', '链接文本'],
+        image: ['![', '](url)', '图片描述'], ul: ['- ', '', '列表项'], ol: ['1. ', '', '列表项'],
+        hr: ['\n---\n', '', ''], task: ['- [ ] ', '', '待办事项']
+      };
+      if (!map[type]) return;
+      [before, after, rep] = map[type];
+      rep = sel || rep;
+      editor.value = txt.substring(0, start) + before + rep + after + txt.substring(end);
+      editor.focus();
+      const ns = start + before.length;
+      editor.setSelectionRange(ns, ns + rep.length);
+      render();
+    }
+
+    // 4. 辅助工具
+    function copyContent() {
+      navigator.clipboard.writeText(editor.value).then(() => alert('✅ 已复制到剪贴板'));
+    }
+    function clearEditor() {
+      if (confirm('确定清空所有内容吗？')) { editor.value = ''; render(); }
+    }
+    function toggleFullscreen() {
+      document.body.classList.toggle('fullscreen');
+    }
+    function toggleTheme() {
+      const html = document.documentElement;
+      const current = html.getAttribute('data-theme');
+      const next = current === 'light' ? 'dark' : 'light';
+      html.setAttribute('data-theme', next);
+      document.getElementById('themeIcon').className = next === 'light' ? 'ri-moon-line' : 'ri-sun-line';
+      // 切换代码高亮主题
+      const hlLink = document.getElementById('hljs-theme');
+      hlLink.href = next === 'dark' 
+        ? 'https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/styles/github-dark.min.css'
+        : 'https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/styles/github.min.css';
+      localStorage.setItem('md-theme', next);
+    }
+
+    // 5. 自动保存 (防抖 800ms)
+    let saveTimer;
+    function autoSave() {
+      clearTimeout(saveTimer);
+      saveStatusEl.classList.remove('show');
+      saveTimer = setTimeout(() => {
+        localStorage.setItem('md-editor-content', editor.value);
+        saveStatusEl.classList.add('show');
+        setTimeout(() => saveStatusEl.classList.remove('show'), 2000);
+      }, 800);
+    }
+
+    // 6. 文件加载 & 导出
+    document.getElementById('loadUrlBtn').addEventListener('click', async () => {
+      const url = document.getElementById('mdUrl').value.trim();
+      if (!url) return alert('请输入 URL');
+      try {
+        const res = await fetch(url);
+        if (!res.ok) throw new Error(res.status);
+        editor.value = await res.text(); render();
+      } catch(e) { alert('加载失败: ' + e.message); }
+    });
+    document.getElementById('fileInput').addEventListener('change', e => {
+      const f = e.target.files[0]; if(!f) return;
+      const r = new FileReader();
+      r.onload = ev => { editor.value = ev.target.result; render(); };
+      r.readAsText(f); e.target.value = '';
+    });
+    document.getElementById('downloadBtn').addEventListener('click', () => {
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(new Blob([editor.value], {type:'text/markdown'}));
+      a.download = `doc-${Date.now()}.md`; a.click();
+    });
+
+    // 快捷键 & Tab
+    editor.addEventListener('keydown', e => {
+      if (e.key === 'Tab') { e.preventDefault(); insertFormat(' '); } // 简化 Tab 为插入空格
+      if (e.ctrlKey || e.metaKey) {
+        if (e.key === 'b') { e.preventDefault(); insertFormat('bold'); }
+        if (e.key === 'i') { e.preventDefault(); insertFormat('italic'); }
+        if (e.key === 's') { e.preventDefault(); localStorage.setItem('md-editor-content', editor.value); saveStatusEl.classList.add('show'); setTimeout(()=>saveStatusEl.classList.remove('show'),2000); }
+      }
+    });
+
+    // 7. 初始化加载
+    window.addEventListener('load', () => {
+      // 恢复主题
+      const savedTheme = localStorage.getItem('md-theme') || 'light';
+      document.documentElement.setAttribute('data-theme', savedTheme);
+      document.getElementById('themeIcon').className = savedTheme === 'light' ? 'ri-moon-line' : 'ri-sun-line';
+      document.getElementById('hljs-theme').href = savedTheme === 'dark'
+        ? 'https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/styles/github-dark.min.css'
+        : 'https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/styles/github.min.css';
+
+      // 恢复内容
+      const saved = localStorage.getItem('md-editor-content');
+      editor.value = saved || `# Markdown 编辑器 Pro
+
+✨ **新增功能**
+- 🌙 暗色/亮色模式无缝切换
+- 💾 编辑内容自动保存至本地
+- 📊 底部实时统计字符、单词、行数
+- ⛶ 一键全屏专注写作
+- 📋 快速复制/清空内容
+- ✅ 支持任务列表 \`- [ ]\` 与分割线
+
+> 提示：使用 \`Ctrl+B\` 加粗，\`Ctrl+I\` 斜体，\`Ctrl+S\` 手动保存。
+`;
+      render();
+      document.getElementById('loader').classList.add('hidden');
+    });
+  </script>
+</body>
+</html>
